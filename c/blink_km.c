@@ -33,7 +33,7 @@ static int __init blink_km_init(void) {
   int result = 0;
 
   // Validate pin number
-  if (!gpio_is_valid(LED_PIN)) {
+  if (!gpio_is_valid(led_pin)) {
     printk(KERN_INFO "blink_km: Initialization failed. Invalid LED GPIO.\n");
     return -ENODEV;
   }
@@ -57,7 +57,7 @@ static int __init blink_km_init(void) {
   }
 
   // Make LED GPIO visible in /sys/class/gpio with direction fixed
-  gpio_export(LED_PIN, 0);
+  gpio_export(led_pin, 0);
 
   // Configure the timer
   timer_setup(&blink_timer, blink_timer_callback, 0);
@@ -71,7 +71,7 @@ static int __init blink_km_init(void) {
   }
 
   printk(KERN_INFO "blink_km: Initialized on GPIO %d, period %d ms\n", LED_PIN,
-         BLINK_PERIOD_MS);
+         blink_period_ms);
   return result;
 }
 
