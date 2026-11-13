@@ -11,5 +11,5 @@ while true; do
   else
     echo "$TIMESTAMP - Read failed (I/O error or checksum mismatch), waiting for sensor to reset..."
   fi
-    sleep 2.5
+    sleep 3
 done
