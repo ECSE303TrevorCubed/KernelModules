@@ -77,16 +77,15 @@ dmesg | tail -n 20
 With the module running, you should be able to observe the device with:
 ```bash
 ls -l /sys/bus/iio/devices/
-# You should see iio:device0
 ```
 
 and you can read individual values with:
 ```bash
 # Temperature (e.g. 21000 = 21.000 °C)
-cat /sys/bus/iio/devices/iio:device0/in_temp_input
+cat /sys/bus/iio/devices/iio:device3/in_temp_input
 
 # Humidity (e.g. 45000 = 45.000 % RH)
-cat /sys/bus/iio/devices/iio:device0/in_humidityrelative_input
+cat /sys/bus/iio/devices/iio:device3/in_humidityrelative_input
 ```
 
 The `read.sh` shell script can be used to automate the process, polling every 2 seconds and printing the data retrieved:
