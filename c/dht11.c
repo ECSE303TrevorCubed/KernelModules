@@ -1,5 +1,5 @@
 /*
- * DHT11/DHT22 bit banging GPIO driver
+ * DHT11 bit banging GPIO driver
  *
  * Copyright (c) Harald Geyer <harald@ccbib.org>
  *
@@ -13,8 +13,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * Revision made my Ethan Heckman for purpose of ECSE303 Lab K
- * Changes: Removed DHT22 fucntinality and updated for current Linux Headers
+ * Revision made by Ethan Heckman for purpose of ECSE303 Lab K
+ * Changes: Removed DHT22 functionality and updated for current Linux Headers
+ *
+ * Adapted for ECSE303 Lab K by Trevor Swan, Justin Fossum, Trevor Nichols
+ * (Group 11)
  */
 
 #include <linux/bitops.h>
@@ -23,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/iio/iio.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -38,13 +42,9 @@
 #include <linux/timekeeping.h>
 #include <linux/wait.h>
 
-
-/* #include <linux/iio/iio_core.h> */
-#include <linux/iio/iio.h>
-
 #define DRIVER_NAME "dht11"
 
-#define DHT11_DATA_VALID_TIME 2000000000 /* 2s in ns */
+#define DHT11_DATA_VALID_TIME 2000000000ULL /* 2s in ns */
 
 #define DHT11_EDGES_PREAMBLE 2
 #define DHT11_BITS_PER_READ 40
@@ -60,7 +60,7 @@
  * Data bits are encoded as pulse length (high time) on the data line.
  * 0-bit: 22-30uS -- typically 26uS (AM2302)
  * 1-bit: 68-75uS -- typically 70uS (AM2302)
- * The acutal timings also depend on the properties of the cable, with
+ * The actual timings also depend on the properties of the cable, with
  * longer cables typically making pulses shorter.
  *
  * Our decoding depends on the time resolution of the system:
@@ -68,13 +68,6 @@
  * 34uS > timeres > 30uS ... no problem (30kHz and 32kHz clocks)
  * 30uS > timeres > 23uS ... don't know what a 2-tick pulse is
  * timeres < 23uS ... no problem
- *
- * Luckily clocks in the 33-44kHz range are quite uncommon, so we can
- * support most systems if the threshold for decoding a pulse as 1-bit
- * is chosen carefully. If somebody really wants to support clocks around
- * 40kHz, where this driver is most unreliable, there are two options.
- * a) select an implementation using busy loop polling on those systems
- * b) use the checksum to do some probabilistic decoding
  */
 #define DHT11_START_TRANSMISSION_MIN 18000 /* us */
 #define DHT11_START_TRANSMISSION_MAX 20000 /* us */
@@ -107,8 +100,7 @@ struct dht11 {
 
 #ifdef CONFIG_DYNAMIC_DEBUG
 /*
- * dht11_edges_print: show the data as actually received by the
- *                    driver.
+ * dht11_edges_print: show the data as actually received by the driver.
  */
 static void dht11_edges_print(struct dht11 *dht11) {
   int i;
@@ -122,7 +114,7 @@ static void dht11_edges_print(struct dht11 *dht11) {
 }
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
-static unsigned char dht11_decode_byte(char *bits) {
+static unsigned char dht11_decode_byte(const char *bits) {
   unsigned char ret = 0;
   int i;
 
@@ -136,7 +128,8 @@ static unsigned char dht11_decode_byte(char *bits) {
 }
 
 static int dht11_decode(struct dht11 *dht11, int offset) {
-  int i, t;
+  int i;
+  s64 t;
   char bits[DHT11_BITS_PER_READ];
   unsigned char temp_int, temp_dec, hum_int, hum_dec, checksum;
 
@@ -267,7 +260,6 @@ err:
 }
 
 static const struct iio_info dht11_iio_info = {
-    //	.driver_module		= THIS_MODULE,
     .read_raw = dht11_read_raw,
 };
 
@@ -279,12 +271,10 @@ static const struct iio_chan_spec dht11_chan_spec[] = {
     {
         .type = IIO_HUMIDITYRELATIVE,
         .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
-    }};
+    },
+};
 
-static const struct of_device_id dht11_dt_ids[] = {{
-                                                       .compatible = "dht11",
-                                                   },
-                                                   {}};
+static const struct of_device_id dht11_dt_ids[] = {{.compatible = "dht11"}, {}};
 MODULE_DEVICE_TABLE(of, dht11_dt_ids);
 
 static int dht11_probe(struct platform_device *pdev) {
@@ -345,6 +335,6 @@ static struct platform_driver dht11_driver = {
 
 module_platform_driver(dht11_driver);
 
-MODULE_AUTHOR("Harald Geyer <harald@ccbib.org>");
+MODULE_AUTHOR("Harald Geyer <harald@ccbib.org>, Ethan Heckman");
 MODULE_DESCRIPTION("DHT11 humidity/temperature sensor driver");
 MODULE_LICENSE("GPL v2");
