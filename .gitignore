@@ -9,3 +9,9 @@ result-*
 report/*.pdf
 *.log
 *.tmp
+*.cmd
+*.symvers
+*.mod
+*.ko
+*.mod.c
+*.order
