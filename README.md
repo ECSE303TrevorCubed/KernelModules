@@ -82,10 +82,10 @@ ls -l /sys/bus/iio/devices/
 and you can read individual values with:
 ```bash
 # Temperature (e.g. 21000 = 21.000 °C)
-cat /sys/bus/iio/devices/iio:device3/in_temp_input
+cat /sys/bus/iio/devices/iio:device2/in_temp_input
 
 # Humidity (e.g. 45000 = 45.000 % RH)
-cat /sys/bus/iio/devices/iio:device3/in_humidityrelative_input
+cat /sys/bus/iio/devices/iio:device2/in_humidityrelative_input
 ```
 
 The `read.sh` shell script can be used to automate the process, polling every 2 seconds and printing the data retrieved:
