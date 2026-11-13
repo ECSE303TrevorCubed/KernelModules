@@ -47,12 +47,9 @@ Note that this folder may be `/boot/overlays` in older versions. You can check t
 
 Then, tell the bootloader to load the overlay on boot:
 ```bash
-CONFIG_FILE="/boot/config.txt"
-[ -f "/boot/firmware/config.txt" ] && CONFIG_FILE="/boot/firmware/config.txt"
-
-echo "dtoverlay=dht11,gpiopin=4" | sudo tee -a "$CONFIG_FILE"
+echo "dtoverlay=dht11,gpiopin=25" | sudo tee -a /boot/firmware/config.txt
 ```
-Note that you can set the gpiopin above to the BCM pin that you desire to use for the lab.
+Similarly, older system versions may have the config file at `/boot/config.txt` (check this with the same `ls` command). Note that you can set the gpiopin above to the BCM pin that you desire to use for the lab.
 
 Next, you should reboot the Pi with `sudo reboot`.
 
