@@ -1,0 +1,12 @@
+For the provided module,
+
+to read humidity:
+cat /sys/bus/iio/devices/iio\:device0/in_humidityrelative_input
+
+to read temperature:
+cat /sys/bus/iio/devices/iio\:device0/in_temp_input
+
+Sample output for temperature:
+21000
+
+This means 21.000 degrees Celcius.
