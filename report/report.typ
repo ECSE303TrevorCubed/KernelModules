@@ -213,8 +213,7 @@ The polling solution was more intensive on the CPU as it had to use 100% of the 
   - The DHT11 code was also nice as that implementation was considerably more complex, so having the sample code to use for our driver, with some modifications to be made, made the process smooth
 
 = Demo
-We uploaded our demo online as it was performed outside of standard lab hours. You can find our demo here:
-// TODO: link to demo
+We uploaded our demo online as it was performed outside of standard lab hours. You can find our demo here: https://drive.google.com/drive/folders/1ZaAQcAgq5Oql8A-AQPc5B3MNBb7vQfIl?usp=drive_link
 
 = Notes
 - GPIO pin layout:

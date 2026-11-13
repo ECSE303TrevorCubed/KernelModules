@@ -1,8 +1,11 @@
 # Lab K: Kernel Modules
+
 Authors: Trevor Swan, Justin Fossum, Trevor Nichols
 
 ## Part 1: Blink
+
 The following sequence of commands is used to compile and load the blink kernel module:
+
 ```bash
 cd /path/to/KernelModules/c
 make modules
@@ -10,11 +13,14 @@ sudo insmod blink_km.ko
 ```
 
 This uses the default GPIO 25 and 500 ms period, but you can specify your own with:
+
 ```bash
 sudo insmod blink_km.ko led_pin=25 blink_period_ms=500
 ```
 
-Once running, the LED should start blinking immediately, but you can run the following to check execution is proceeding as expected:
+Once running, the LED should start blinking immediately, but you can run the following
+to check execution is proceeding as expected:
+
 ```bash
 # View kernel logs
 dmesg | tail -n 15
@@ -27,39 +33,53 @@ ls -l /sys/class/gpio/gpio25
 ```
 
 The kernel module can then be removed with:
+
 ```bash
 sudo rmmod blink_km
 ```
+
 which will safely turn off the LED and deallocate all resources.
 
 ## Part 2: DHT11 Sensor
+
 The following commands are used to compile the device tree source into a binary:
+
 ```bash
 cd /path/to/KernelModules/c
 make dtb
 ```
 
 Next, copy the compiled overlay into the system overlays folder
+
 ```bash
 sudo cp -p dht11-overlay.dtb /boot/firmware/overlays/
 ```
-Note that this folder may be `/boot/overlays` in older versions. You can check the existence of either with `ls /boot/overlays` (if 'No such file or directory' is seen, use the other path!)
+
+Note that this folder may be `/boot/overlays` in older versions. You can check the
+existence of either with `ls /boot/overlays` (if 'No such file or directory' is seen,
+use the other path!)
 
 Then, tell the bootloader to load the overlay on boot:
+
 ```bash
 echo "dtoverlay=dht11,gpiopin=25" | sudo tee -a /boot/firmware/config.txt
 ```
-Similarly, older system versions may have the config file at `/boot/config.txt` (check this with the same `ls` command). Note that you can set the gpiopin above to the BCM pin that you desire to use for the lab.
+
+Similarly, older system versions may have the config file at `/boot/config.txt` (check
+this with the same `ls` command). Note that you can set the gpiopin above to the BCM pin
+that you desire to use for the lab.
 
 Next, you should reboot the Pi with `sudo reboot`.
 
 Once rebooted, run the following commands to build the kernel module itself:
+
 ```bash
 cd /path/to/KernelModules/c
 make dht11
 ```
 
 Now the module can be tested:
+
 ```bash
 # Check if the kernel auto-loaded the stock dht11 driver
 lsmod | grep dht11
@@ -75,11 +95,13 @@ dmesg | tail -n 20
 ```
 
 With the module running, you should be able to observe the device with:
+
 ```bash
 ls -l /sys/bus/iio/devices/
 ```
 
 and you can read individual values with:
+
 ```bash
 # Temperature (e.g. 21000 = 21.000 °C)
 cat /sys/bus/iio/devices/iio:device2/in_temp_input
@@ -88,7 +110,9 @@ cat /sys/bus/iio/devices/iio:device2/in_temp_input
 cat /sys/bus/iio/devices/iio:device2/in_humidityrelative_input
 ```
 
-The `read.sh` shell script can be used to automate the process, polling every 2 seconds and printing the data retrieved:
+The `read.sh` shell script can be used to automate the process, polling every 2 seconds
+and printing the data retrieved:
+
 ```bash
 cd /path/to/KernelModules
 chmod +x read.sh
@@ -96,6 +120,7 @@ chmod +x read.sh
 ```
 
 Once done, unload the module with:
+
 ```bash
 sudo rmmod dht11
 ```
