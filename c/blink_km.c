@@ -70,7 +70,7 @@ static int __init blink_km_init(void) {
     return result;
   }
 
-  printk(KERN_INFO "blink_km: Initialized on GPIO %d, period %d ms\n", LED_PIN,
+  printk(KERN_INFO "blink_km: Initialized on GPIO %d, period %d ms\n", led_pin,
          blink_period_ms);
   return result;
 }
