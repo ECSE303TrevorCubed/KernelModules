@@ -22,7 +22,7 @@ The objective of this assignment is to design and build microsecond-response dri
 
 == Hardware Configuration
 - *Blinking LED Setup*
-  - An LED with its anode connected through a 220 $Omega$ current-limiting resistor to GPIO pin 25 (configurable at module insertion via the `led_pin` parameter)
+  - An LED with its anode connected through a 220 Ohm current-limiting resistor to GPIO pin 25 (configurable at module insertion via the `led_pin` parameter)
   - The LED's cathode is connected directly to the Pi's ground pin
 - *DHT11 Sensor Setup*
   - Data Pin: Connected to GPIO 25 (`#define DHT11_PIN 25`, physical pin 37) with a 10 kOhm pull-up resistor to the 3.3V power rail.
@@ -67,6 +67,86 @@ The objective of this assignment is to design and build microsecond-response dri
 
 = Results and Observations
 
+== Part 1: Blinking LED Results
+The `blink_km.ko` module successfully compiled and inserted into the running kernel without errors. As soon as we ran ```bash sudo insmod blink_km.ko led_pin=25 blink_period_ms=500```, the connected LED immediately starting blinking at the set interval.
+
+// TODO: photo of part 1 circuit
+// #figure(image("led_circuit.png", width: 75%), caption: [Circuit layout for LED Kernel Module])
+
+The intialization was confirmed by inspecting the kernel logs with `dmesg`:
+```log
+[32065.715397] blink_km: Initialized on GPIO 25, period 500 ms
+```
+indicating that the print statement at the end of our initialization ran successfully.
+
+The GPIO sysfs export at `/sys/class/gpio/gpio25` confirmed that the pin was exported correctly with its direction locked to prevent user-space code from interfering with it. Removing the kernel module with ```bash sudo rmmod blink_km``` safely released the timer and turned off the LED, releasing the allocated resources back to the OS.
+
+// TODO: photo of terminal
+// #figure(image("blink_terminal.png", width: 85%), caption: [Blink kernel module compilation output])
+
+== Part 2: DHT11 Sensor Results
+The device tree overlay (`dht11-overlay.dtb`) was successfully compiled with `dtc` and copied to `/boot/firmware/overlays/`. Booting with `dtoverlay=dht11,gpiopin=25` configured in `/boot/firmware/config.txt` enabled the device which aligned with the compiled `dht11.ko` kernel module.
+
+// TODO: photo of part 2 circuit
+// #figure(image("dht11_circuit.png", width: 75%), caption: [Circuit layout for DHT11 Kernel Module])
+
+We checked `/sys/bus/iio/devices/` to confirm the creation of the virtual device nodes, and then proceeded to sample the sensor output with the following shell script (`read.sh`):
+```bash
+#!/bin/sh
+while true; do
+  echo -n "$(date '+%H:%M:%S') - Temp: "
+  cat /sys/bus/iio/devices/iio:device3/in_temp_input
+  echo -n "$(date '+%H:%M:%S') - Humidity: "
+  cat /sys/bus/iio/devices/iio:device3/in_humidityrelative_input
+  sleep 2
+done
+```
+
+This script was used to collect sensor data, which read:
+// TODO: actual logs
+```log
+```
+
+The output values were formatted in the standard IIO integer format, where `21000` corresponds to 21.000 °C and `43000` corresponds to 43.000% relative humidity.
+
+Testing the driver without the DHT11 hardware attached resulted in the expected error:
+```txt
+cat: '/sys/bus/iio/devices/iio:device3/in_temp_input': Connection timed out
+```
+verifying that the driver's communication with the hardware was bounded and did not hang the system when nothing was connected.
+
+// TODO: photo of terminal
+// #figure(image("dht11_terminal.png", width: 85%), caption: [DHT11 Terminal Session])
+
+== Comparison and Analysis
+The LED kernel module's performance against the user-space code is not noteworthy as there is no desire for highly precise timers or real-time code with simply blinking an LED. The core comparison from this lab comes from pitting the user-space polling and interrupt DHT11 solutions against the kernel driver:
+
+#table(
+  columns: 4,
+  table.header([*Evaluation Metric*], [*User Polling (Lab 2)*], [*User Interrupt (Lab 2)*], [*Kernel Driver (Lab K)*]),
+  [Execution Context],
+  [User-space thread spinning on GPIO],
+  [User thread woken via epoll on sysfs],
+  [Hard-IRQ ISR in CPU context],
+
+  [Edge Detection Latency], [Direct register read], [Context switch latency], [< 1 $mu$s direct interrupt vector],
+  [Preemption Sensitivity], [High], [Severe], [Negligible],
+  [Observed Checksum Failures], [10% - 25% under normal system load], [40% - 70% without RT priority], [~0%],
+  [CPU Core Utilization], [100% of single core during read], [Burst load during edge transitions], [Near 0%],
+  [Security & Permissions], [Requires root access], [Requires root access], [Unprivileged readable sysfs after load],
+)
+
+=== Latency
+Lab 2 Part 2 used user-space interrupt handling through `wiringPiISR`, suffering from severe latency issues. A physical edge occurring from the sensor would wake up an `epoll()` wait queue, causing a context switch across the user-space/kernel-space boundary. This is a costly operation that, if taking longer than the 26-28 $mu$s high pulse from the DHT11, would result in a missed data point, corrupting the resulting checksum.
+
+`dht11.ko` instead runs its edge handler (`dht11_handle_irq`) directly inside a hard-IRQ context. `ktime_get_raw_ns()` is used to directly poll hardware timers, eliminating scheduling jitter.
+
+=== Accuracy & Checksum Verification
+Lab 2's user-space polling solution was moderately more accurate than the interrupt solution but failed checksum validation due to scheduler preemption. Preempting the process resulting in critical CPU time being spent on background tasks rather than consistently polling and validating the data, resulting in data being dropped consistently. The kernel module instead was nearly 100% consistent with an identical circuit layout, indicating that no bits in the 40-bit transfer were lost. This was due to the strict timing provided by hard-IRQ execution.
+
+=== System Overhead
+The polling solution was more intensive on the CPU as it had to use 100% of the core in a tight spin-loop (`delayMicroseconds(1)`). The kernel module instead uses kernel wait queues (`wait_for_completion_killable_timeout`) so that the process can sleep while the hardware gathers edges, consuming virtually 0 CPU cycles. Also, the implementation using the Industrial I/O (IIO) subsystem means that sensor communication can be read by non-root processes.
+
 = Conclusions
 
 == Techniques learned
@@ -81,6 +161,10 @@ The objective of this assignment is to design and build microsecond-response dri
 - The content of the lab was very feasible to complete and digest given the sample code
   - The LED code was nice because it didn't exactly give the implementation needed for parity with Lab 1, requiring some modifications
   - The DHT11 code was also nice as that implementation was considerably more complex, so having the sample code to use for our driver, with some modifications to be made, made the process smooth
+
+= Demo
+We uploaded our demo online as it was performed outside of standard lab hours. You can find our demo here:
+// TODO: link to demo
 
 = Notes
 - GPIO pin layout:
