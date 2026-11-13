@@ -57,12 +57,12 @@ The objective of this assignment is to design and build microsecond-response dri
 8. Observe the sensor readings using IIO (or use the `read.sh` shell script)
   ```bash
   # Temperature (e.g. 21000 = 21.000 °C)
-  cat /sys/bus/iio/devices/iio:device3/in_temp_input
+  cat /sys/bus/iio/devices/iio:device2/in_temp_input
 
   # Humidity (e.g. 45000 = 45.000 % RH)
-  cat /sys/bus/iio/devices/iio:device3/in_humidityrelative_input
+  cat /sys/bus/iio/devices/iio:device2/in_humidityrelative_input
   ```
-  - Note that your Pi's iio device may be different. Check its mapping with ```bash ls -l ls -l /sys/bus/iio/devices/```
+  - Note that your Pi's iio device may be different. Check its mapping with ```bash ls -l /sys/bus/iio/devices/```
 9. Unload the module with ```bash sudo rmmod dht11``` to release allocated resources
 
 = Results and Observations
@@ -70,8 +70,10 @@ The objective of this assignment is to design and build microsecond-response dri
 == Part 1: Blinking LED Results
 The `blink_km.ko` module successfully compiled and inserted into the running kernel without errors. As soon as we ran ```bash sudo insmod blink_km.ko led_pin=25 blink_period_ms=500```, the connected LED immediately starting blinking at the set interval.
 
-// TODO: photo of part 1 circuit
-// #figure(image("led_circuit.png", width: 75%), caption: [Circuit layout for LED Kernel Module])
+#figure(
+  image("led_circuit.jpeg", width: 75%),
+  caption: [Circuit layout for LED Kernel Module],
+)
 
 The intialization was confirmed by inspecting the kernel logs with `dmesg`:
 ```log
@@ -81,59 +83,105 @@ indicating that the print statement at the end of our initialization ran success
 
 The GPIO sysfs export at `/sys/class/gpio/gpio25` confirmed that the pin was exported correctly with its direction locked to prevent user-space code from interfering with it. Removing the kernel module with ```bash sudo rmmod blink_km``` safely released the timer and turned off the LED, releasing the allocated resources back to the OS.
 
-// TODO: photo of terminal
-// #figure(image("blink_terminal.png", width: 85%), caption: [Blink kernel module compilation output])
+#figure(
+  image("blink_terminal.png", width: 85%),
+  caption: [Blink kernel module terminal interaction],
+)
+
+The above image shows the compilation and startup for the kernel module as well as its teardown process, accompanied by verification of the GPIO pin export.
 
 == Part 2: DHT11 Sensor Results
 The device tree overlay (`dht11-overlay.dtb`) was successfully compiled with `dtc` and copied to `/boot/firmware/overlays/`. Booting with `dtoverlay=dht11,gpiopin=25` configured in `/boot/firmware/config.txt` enabled the device which aligned with the compiled `dht11.ko` kernel module.
 
-// TODO: photo of part 2 circuit
-// #figure(image("dht11_circuit.png", width: 75%), caption: [Circuit layout for DHT11 Kernel Module])
+#figure(
+  image("dht11_circuit.jpeg", width: 75%),
+  caption: [Circuit layout for DHT11 Kernel Module],
+)
 
 We checked `/sys/bus/iio/devices/` to confirm the creation of the virtual device nodes, and then proceeded to sample the sensor output with the following shell script (`read.sh`):
 ```bash
 #!/bin/sh
+DEV="/sys/bus/iio/devices/iio:device2"
+
 while true; do
-  echo -n "$(date '+%H:%M:%S') - Temp: "
-  cat /sys/bus/iio/devices/iio:device3/in_temp_input
-  echo -n "$(date '+%H:%M:%S') - Humidity: "
-  cat /sys/bus/iio/devices/iio:device3/in_humidityrelative_input
-  sleep 2
+  TIMESTAMP=$(date '+%H:%M:%S')
+
+  if TEMP=$(cat "$DEV/in_temp_input" 2>/dev/null); then
+    HUM=$(cat "$DEV/in_humidityrelative_input" 2>/dev/null)
+    echo "$TIMESTAMP - Temp: $TEMP"
+    echo "$TIMESTAMP - Humidity: $HUM"
+  else
+    echo "$TIMESTAMP - Read failed (I/O error or checksum mismatch), waiting for sensor to reset..."
+  fi
+    sleep 2.5
 done
 ```
 
 This script was used to collect sensor data, which read:
-// TODO: actual logs
 ```log
+11:55:44 - Temp: 22000
+11:55:44 - Humidity: 27000
+11:55:46 - Temp: 22000
+11:55:46 - Humidity: 27000
+11:55:48 - Temp: 22000
+11:55:48 - Humidity: 27000
+11:55:50 - Temp: 22000
+11:55:50 - Humidity: 27000
+11:55:52 - Temp: 22000
+11:55:52 - Humidity: 27000
 ```
 
 The output values were formatted in the standard IIO integer format, where `21000` corresponds to 21.000 °C and `43000` corresponds to 43.000% relative humidity.
 
 Testing the driver without the DHT11 hardware attached resulted in the expected error:
 ```txt
-cat: '/sys/bus/iio/devices/iio:device3/in_temp_input': Connection timed out
+cat: '/sys/bus/iio/devices/iio:device2/in_temp_input': Connection timed out
 ```
 verifying that the driver's communication with the hardware was bounded and did not hang the system when nothing was connected.
 
-// TODO: photo of terminal
-// #figure(image("dht11_terminal.png", width: 85%), caption: [DHT11 Terminal Session])
+#figure(
+  image("dht11_terminal.png", width: 85%),
+  caption: [DHT11 Terminal Session],
+)
+
+The above image shows the compilation process, verification of initial configuration, error messages from the kernel, successful reads, and an data fetch error from an IO failure.
 
 == Comparison and Analysis
 The LED kernel module's performance against the user-space code is not noteworthy as there is no desire for highly precise timers or real-time code with simply blinking an LED. The core comparison from this lab comes from pitting the user-space polling and interrupt DHT11 solutions against the kernel driver:
 
 #table(
   columns: 4,
-  table.header([*Evaluation Metric*], [*User Polling (Lab 2)*], [*User Interrupt (Lab 2)*], [*Kernel Driver (Lab K)*]),
+  table.header(
+    [*Evaluation Metric*],
+    [*User Polling (Lab 2)*],
+    [*User Interrupt (Lab 2)*],
+    [*Kernel Driver (Lab K)*],
+  ),
   [Execution Context],
   [User-space thread spinning on GPIO],
   [User thread woken via epoll on sysfs],
   [Hard-IRQ ISR in CPU context],
 
-  [Edge Detection Latency], [Direct register read], [Context switch latency], [< 1 $mu$s direct interrupt vector],
+  [Edge Detection Latency],
+  [Direct register read],
+  [Context switch latency],
+  [< 1 $mu$s direct interrupt vector],
+
   [Preemption Sensitivity], [High], [Severe], [Negligible],
-  [Observed Checksum Failures], [10% - 25% under normal system load], [40% - 70% without RT priority], [~0%],
-  [CPU Core Utilization], [100% of single core during read], [Burst load during edge transitions], [Near 0%],
-  [Security & Permissions], [Requires root access], [Requires root access], [Unprivileged readable sysfs after load],
+  [Observed Checksum Failures],
+  [~25% under normal system load],
+  [40% - 70% without RT priority],
+  [~10%],
+
+  [CPU Core Utilization],
+  [100% of single core during read],
+  [Burst load during edge transitions],
+  [Near 0%],
+
+  [Security & Permissions],
+  [Requires root access],
+  [Requires root access],
+  [Unprivileged readable sysfs after load],
 )
 
 === Latency
@@ -142,7 +190,9 @@ Lab 2 Part 2 used user-space interrupt handling through `wiringPiISR`, suffering
 `dht11.ko` instead runs its edge handler (`dht11_handle_irq`) directly inside a hard-IRQ context. `ktime_get_raw_ns()` is used to directly poll hardware timers, eliminating scheduling jitter.
 
 === Accuracy & Checksum Verification
-Lab 2's user-space polling solution was moderately more accurate than the interrupt solution but failed checksum validation due to scheduler preemption. Preempting the process resulting in critical CPU time being spent on background tasks rather than consistently polling and validating the data, resulting in data being dropped consistently. The kernel module instead was nearly 100% consistent with an identical circuit layout, indicating that no bits in the 40-bit transfer were lost. This was due to the strict timing provided by hard-IRQ execution.
+Lab 2's user-space polling solution was moderately more accurate than the interrupt solution but failed checksum validation due to scheduler preemption. Preempting the process resulting in critical CPU time being spent on background tasks rather than consistently polling and validating the data, resulting in data being dropped consistently. The kernel module instead was about 90% consistent with an identical circuit layout, indicating that very few bits in the 40-bit transfer were lost. This was due to the strict timing provided by hard-IRQ execution.
+
+Since our hardware is relatively cheap, reads sometimes fail even with this setup. This suggests that some kind of retry logic would be beneficial to our setup. User-space retry logic with back-off may be useful here, but it is not within the scope of the lab.
 
 === System Overhead
 The polling solution was more intensive on the CPU as it had to use 100% of the core in a tight spin-loop (`delayMicroseconds(1)`). The kernel module instead uses kernel wait queues (`wait_for_completion_killable_timeout`) so that the process can sleep while the hardware gathers edges, consuming virtually 0 CPU cycles. Also, the implementation using the Industrial I/O (IIO) subsystem means that sensor communication can be read by non-root processes.
@@ -211,6 +261,22 @@ We uploaded our demo online as it was performed outside of standard lab hours. Y
 - Querying `in_temp_input` or `in_humidityrelative_input` without a physical sensor attached returns: `cat: ...: Connection timed out`
 - The commands provided that detail using `iio:device0` to read the sensor output were general, and we had to change the device number following inspection of `/sys/bus/iio/devices/`
   - When inspecting `/sys/bus/iio/devices/` we saw multiple overlay instances:
-    - `dht11@4` was assigned to `iio:device3`
+    - `dht11@4` was assigned to `iio:device2`
     - `dht11@19` was assigned to `iio:device2`
 - Reading the sensor output (```bash cat /sys/bus/iio/devices/iio:deviceX/in_temp_input```) does not require `sudo`
+- Since we are using a GCC version that's newer than what the kernel was built with, we get a warning in the terminal:
+  ```text
+  The kernel was built by: gcc (Debian 10.2.1-6) 10.2.1 20210110
+  You are using:           gcc (Debian 14.2.0-19) 14.2.0
+  ```
+  - This is harmless, and the code still compiles and runs correctly with this warning
+- When running ```bash ls -l /sys/bus/iio/devices/```, we saw the output:
+  ```text
+  lrwxrwxrwx 1 root root 0 Nov 13 11:44 iio:device2 -> ../../../devices/platform/dht11@19/iio:device2
+  lrwxrwxrwx 1 root root 0 Nov 13 11:44 iio:device3 -> ../../../devices/platform/dht11@4/iio:device3
+  ```
+  - We couldn't tell immediately which device node was correct, so we tried both. For our Pi, device2 was successful
+- The dht driver caches a successful read for 2 seconds (`DHT11_DATA_VALID_TIME`). We made our sleep delay slightly greater than this to minimize potential I/O errors
+  - Setting the delay to 3 seconds seemed to reduce the number of errors we got
+  - We inspected the kernel logs and saw the error message: ```log [40584.163007] dht11 dht11@19: Only 1 signal edges detected```
+    - This indicates that the failure comes from the initial handshake, not the checksum stage. This is promising because it points to the hardware or sleep duration being slightly off, not the driver logic itself
