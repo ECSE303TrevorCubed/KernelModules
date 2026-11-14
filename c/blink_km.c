@@ -56,8 +56,12 @@ static int __init blink_km_init(void) {
     return result;
   }
 
-  // Make LED GPIO visible in /sys/class/gpio with direction fixed
+  // Make LED GPIO visible in /sys/class/gpio with direction fixed.
+  // Only available when the target kernel enables CONFIG_GPIO_SYSFS
+  // (Raspberry Pi OS does; stock nixpkgs kernels do not).
+#ifdef CONFIG_GPIO_SYSFS
   gpio_export(led_pin, 0);
+#endif
 
   // Configure the timer
   timer_setup(&blink_timer, blink_timer_callback, 0);
@@ -65,7 +69,9 @@ static int __init blink_km_init(void) {
   if (result) {
     printk(KERN_ERR "blink_km: Failed to arm kernel timer (err: %d)\n", result);
     gpio_set_value(led_pin, 0);
+#ifdef CONFIG_GPIO_SYSFS
     gpio_unexport(led_pin);
+#endif
     gpio_free(led_pin);
     return result;
   }
@@ -81,7 +87,9 @@ static void __exit blink_km_exit(void) {
 
   // Turn off LED and release resources
   gpio_set_value(led_pin, 0);
+#ifdef CONFIG_GPIO_SYSFS
   gpio_unexport(led_pin);
+#endif
   gpio_free(led_pin);
 
   printk(KERN_INFO "blink_km: Module unloaded and GPIO %d released\n", led_pin);
